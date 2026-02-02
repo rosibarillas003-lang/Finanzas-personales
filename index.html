@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Finance Elite - Dashboard</title>
+
+    <!-- Librerías -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/recharts@2.10.3/umd/Recharts.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background:#f8fafc; margin:0 }
+        .custom-scrollbar::-webkit-scrollbar { width:4px }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background:#cbd5e1;border-radius:10px }
+        #loader{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#fff;z-index:9999}
+        .spinner{width:40px;height:40px;border:3px solid #e5e7eb;border-top:3px solid #6366f1;border-radius:50%;animation:spin 1s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+    </style>
+</head>
+
+<body>
+<div id="loader"><div class="spinner"></div></div>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo } = React;
+const { PieChart, Pie, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Cell, LabelList } = Recharts;
+
+const MONTHS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const TAGS = ['Belleza','Salidas','Efectivo','Compras','Uber','Comida'];
+const COLORS = ['#6366f1','#db2777','#0ea5e9','#10b981','#f59e0b','#8b5cf6'];
+
+const fmt = v => (parseFloat(v)||0).toLocaleString('es-ES',{style:'currency',currency:'EUR'});
+
+const App = () => {
+    const [activeTab,setActiveTab] = useState('Enero');
+    const [data,setData] = useState(()=>{
+        const s = localStorage.getItem('finance_data_v3');
+        return s ? JSON.parse(s) : {
+            config:{pNec:50,pDes:30,pAho:20},
+            loans:[],
+            monthly:MONTHS.reduce((a,m)=>({...a,[m]:{
+                salario:0,entradas:0,mesPasado:0,prestado:0,ahorroManual:0,
+                gastosFijos:[],gastosVariables:[]
+            }}),{})
+        };
+    });
+
+    useEffect(()=>localStorage.setItem('finance_data_v3',JSON.stringify(data)),[data]);
+    useEffect(()=>document.getElementById('loader')?.remove(),[]);
+
+    const updateMonth = (m,f,v)=>setData(p=>({...p,monthly:{...p.monthly,[m]:{...p.monthly[m],[f]:parseFloat(v)||0}}}));
+    const updateConfig = (f,v)=>setData(p=>({...p,config:{...p.config,[f]:parseInt(v)||0}}));
+    const addGasto = (m,t)=>setData(p=>({...p,monthly:{...p.monthly,[m]:{...p.monthly[m],[t]:[...p.monthly[m][t],{id:crypto.randomUUID(),nombre:'',valor:0,tag:TAGS[0]}]}}}));
+    const updateGasto = (m,t,id,f,v)=>setData(p=>({...p,monthly:{...p.monthly,[m]:{...p.monthly[m],[t]:p.monthly[m][t].map(g=>g.id===id?{...g,[f]:f==='valor'?parseFloat(v)||0:v}:g)}}}));
+    const deleteGasto = (m,t,id)=>setData(p=>({...p,monthly:{...p.monthly,[m]:{...p.monthly[m],[t]:p.monthly[m][t].filter(g=>g.id!==id)}}}));
+
+    const cur = data.monthly[activeTab] || {};
+    const ingresos = (cur.salario||0)+(cur.entradas||0)+(cur.mesPasado||0)+(cur.prestado||0);
+    const base = Math.max(0, ingresos-(cur.ahorroManual||0));
+    const gF = cur.gastosFijos.reduce((s,g)=>s+g.valor,0);
+    const gV = cur.gastosVariables.reduce((s,g)=>s+g.valor,0);
+    const disp = base*((data.config.pNec+data.config.pDes)/100)-(gF+gV);
+
+    const isConfigValid = data.config.pNec + data.config.pDes + data.config.pAho === 100;
+
+    const savingsByMonth = MONTHS.map(m=>{
+        const d = data.monthly[m];
+        const i = (d.salario||0)+(d.entradas||0)+(d.mesPasado||0)+(d.prestado||0);
+        const b = Math.max(0,i-(d.ahorroManual||0));
+        const f = d.gastosFijos.reduce((s,g)=>s+g.valor,0);
+        const v = d.gastosVariables.reduce((s,g)=>s+g.valor,0);
+        const rem = Math.max(0,b*((data.config.pNec+data.config.pDes)/100)-(f+v));
+        return {month:m,ingresos:i,total:(d.ahorroManual||0)+(b*(data.config.pAho/100))+rem};
+    });
+
+    const categoryData = useMemo(()=>{
+        const c={}; TAGS.forEach(t=>c[t]=0);
+        cur.gastosVariables.forEach(g=>c[g.tag]+=g.valor);
+        return Object.entries(c).map(([name,value])=>({name,value})).filter(d=>d.value>0);
+    },[cur]);
+
+    return (
+        <div className="p-10 space-y-10">
+            <h1 className="text-3xl font-bold">Finance App</h1>
+
+            <select value={activeTab} onChange={e=>setActiveTab(e.target.value)} className="p-2 border rounded">
+                {MONTHS.map(m=><option key={m}>{m}</option>)}
+            </select>
+
+            <div className="grid grid-cols-4 gap-4">
+                {['salario','entradas','mesPasado','prestado'].map(k=>(
+                    <input key={k} type="number" placeholder={k}
+                        value={cur[k]||''}
+                        onChange={e=>updateMonth(activeTab,k,e.target.value)}
+                        className="p-3 border rounded"/>
+                ))}
+            </div>
+
+            <div className="text-xl font-bold">
+                Disponible: <span className={disp<0?'text-red-500':'text-green-600'}>{fmt(disp)}</span>
+            </div>
+
+            {!isConfigValid && <p className="text-red-500 font-bold">La suma de porcentajes debe ser 100%</p>}
+
+            <div className="grid grid-cols-3 gap-6">
+                {['gastosFijos','gastosVariables'].map(t=>(
+                    <div key={t} className="border p-4 rounded">
+                        <h3 className="font-bold mb-2">{t}</h3>
+                        <button onClick={()=>addGasto(activeTab,t)} className="mb-2 text-sm bg-black text-white px-2 py-1 rounded">+</button>
+                        {cur[t].map(g=>(
+                            <div key={g.id} className="flex gap-2 mb-2">
+                                <input value={g.nombre} onChange={e=>updateGasto(activeTab,t,g.id,'nombre',e.target.value)} className="flex-1 border p-1"/>
+                                <input type="number" value={g.valor} onChange={e=>updateGasto(activeTab,t,g.id,'valor',e.target.value)} className="w-24 border p-1"/>
+                                <button onClick={()=>deleteGasto(activeTab,t,g.id)}>🗑</button>
+                            </div>
+                        ))}
+                    </div>
+                ))}
+            </div>
+
+            <div className="h-64">
+                <ResponsiveContainer>
+                    <BarChart data={categoryData} layout="vertical">
+                        <XAxis type="number" hide/>
+                        <YAxis dataKey="name" type="category"/>
+                        <Bar dataKey="value">
+                            {categoryData.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
+                            <LabelList dataKey="value" position="right" formatter={fmt}/>
+                        </Bar>
+                    </BarChart>
+                </ResponsiveContainer>
+            </div>
+        </div>
+    );
+};
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
