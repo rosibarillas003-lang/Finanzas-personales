@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finance Elite - Cloud Multiperfil</title>
+    
+    <!-- Dependencias -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+    <script src="https://unpkg.com/recharts@2.10.3/umd/Recharts.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; margin: 0; color: #334155; }
+        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        #loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: #ffffff; z-index: 9999; }
+        .spinner { width: 40px; height: 40px; border: 3px solid #f1f5f9; border-top: 3px solid #6366f1; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+    <div id="loader"><div class="spinner"></div><p class="mt-4 text-slate-400 text-sm font-medium">Cargando base de datos...</p></div>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useMemo, useEffect } = React;
+        const { PieChart, Pie, Cell, ResponsiveContainer, XAxis, YAxis, Tooltip, BarChart, Bar, CartesianGrid, LabelList } = Recharts;
+
+        // ============================================================
+        // 🟢 CONFIGURACIÓN: PEGA TU URL DE GOOGLE APPS SCRIPT AQUÍ
+        // ============================================================
+        const CLOUD_DATABASE_URL = "https://script.google.com/macros/s/AKfycbyLahgwkhlzcmpqozEyZij4TTOKP0F5-31cfBhXND3hLpFRlqC1HkA3u7omww4iD0h8/exec"; 
+        // ============================================================
+
+        const fmt = (val) => {
+            const n = parseFloat(val) || 0;
+            return n.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
+        };
+
+        const Icons = {
+            Wallet: ({className}) => <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12V7H5a2 2 0 0 1 0-4h14v4"/><path d="M3 5v14a2 2 0 0 0 2 2h16v-5"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg>,
+            Piggy: ({className}) => <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1 .5-1.5 1-2V5Z"/><path d="M12 2v4"/></svg>,
+            Plus: ({className}) => <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+            Trash: ({className}) => <svg className={className} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>,
+            Lock: ({className}) => <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
+            User: ({className}) => <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>,
+            Logout: ({className}) => <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+            Cloud: ({className}) => <svg className={className} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M17.5 19c2.5 0 4.5-2 4.5-4.5 0-2-1.3-3.7-3.1-4.2C18.4 6.2 14.8 3 10.5 3 6.7 3 3.5 5.5 2.4 9 1 9.9 0 11.5 0 13.3c0 2 1.6 3.7 3.6 3.7h13.9Z"/></svg>,
+            Tag: ({className}) => <svg className={className} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>,
+            ArrowUpCircle: ({className}) => <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="16 12 12 8 8 12"/><line x1="12" y1="16" x2="12" y2="8"/></svg>,
+            ArrowDownCircle: ({className}) => <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="8 12 12 16 16 12"/><line x1="12" y1="8" x2="12" y2="16"/></svg>,
+            Settings: ({className}) => <svg className={className} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>,
+            Smartphone: ({className}) => <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg>,
+            Monitor: ({className}) => <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,
+            Calendar: ({className}) => <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>,
+            LoansIcon: ({className}) => <svg className={className} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="m11 15-3-3 3-3"/><path d="m15 9 3 3-3 3"/><rect width="20" height="14" x="2" y="5" rx="2"/><path d="M12 5v14"/></svg>
+        };
+
+        const MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        const TAGS = ['Belleza', 'Salidas', 'Efectivo', 'Compras', 'Uber', 'Comida'];
+        const COLORS = ['#6366f1', '#db2777', '#0ea5e9', '#10b981', '#f59e0b', '#8b5cf6'];
+
+        const getEmptyData = () => ({
+            config: { pNec: 50, pDes: 30, pAho: 20 },
+            loans: [],
+            monthly: MONTHS.reduce((acc, m) => {
+                acc[m] = { salario: 0, entradas: 0, mesPasado: 0, prestado: 0, ahorroManual: 0, gastosFijos: [], gastosVariables: [] };
+                return acc;
+            }, {})
+        });
+
+        const App = () => {
+            const [authState, setAuthState] = useState('locked');
+            const [masterPass, setMasterPass] = useState("");
+            const [profiles, setProfiles] = useState(() => JSON.parse(localStorage.getItem('fin_prof_v9') || '[]'));
+            const [pendingProfile, setPendingProfile] = useState(null);
+            const [profilePass, setProfilePass] = useState("");
+            const [activeProfile, setActiveProfile] = useState(null);
+            const [data, setData] = useState(getEmptyData());
+            const [activeTab, setActiveTab] = useState('Enero');
+            const [isMobileMode, setIsMobileMode] = useState(false);
+            const [showMonthSelector, setShowMonthSelector] = useState(false);
+            const [syncStatus, setSyncStatus] = useState('idle');
+
+            useEffect(() => {
+                const loader = document.getElementById('loader');
+                if (loader) { loader.style.opacity = '0'; setTimeout(() => loader.remove(), 500); }
+            }, []);
+
+            useEffect(() => { localStorage.setItem('fin_prof_v9', JSON.stringify(profiles)); }, [profiles]);
+            useEffect(() => { if (activeProfile) { localStorage.setItem(`fin_dat_v9_${activeProfile}`, JSON.stringify(data)); } }, [data, activeProfile]);
+
+            const handleMasterLogin = (e) => { e.preventDefault(); if (masterPass === 'rmbgs') setAuthState('profile_select'); else alert("Error"); };
+            const initiateProfileAuth = (p) => { setPendingProfile(p); setAuthState('profile_auth'); };
+            const handleProfileAuth = (e) => { e.preventDefault(); if (profilePass === pendingProfile.pin) { setActiveProfile(pendingProfile.name); const s = localStorage.getItem(`fin_dat_v9_${pendingProfile.name}`); setData(s ? JSON.parse(s) : getEmptyData()); setAuthState('main'); setProfilePass(""); } else alert("PIN Incorrecto"); };
+            const handleCreateProfile = (e) => { e.preventDefault(); const n = e.target.pname.value.trim(); const p = e.target.ppin.value.trim(); if (profiles.find(x => x.name.toLowerCase() === n.toLowerCase())) return alert("Ya existe"); setProfiles([...profiles, { name: n, pin: p }]); e.target.reset(); };
+            const logout = () => { setActiveProfile(null); setAuthState('profile_select'); };
+
+            const updateMonth = (m, f, v) => setData(p => ({...p, monthly: {...p.monthly, [m]: {...p.monthly[m], [f]: parseFloat(v) || 0}}}));
+            const updateConfig = (f, v) => setData(p => ({...p, config: {...p.config, [f]: parseInt(v) || 0}}));
+            const addLoan = (n, m) => setData(p => ({...p, loans: [{id:Date.now(),nombre:n,monto:parseFloat(m),pagado:false,fecha:new Date().toLocaleDateString()}, ...p.loans]}));
+            const toggleLoan = (id) => setData(p => ({...p, loans: p.loans.map(l => l.id === id ? {...l, pagado: !l.pagado} : l)}));
+            const deleteLoan = (id) => setData(p => ({...p, loans: p.loans.filter(l => l.id !== id)}));
+            const addGasto = (m, t) => setData(p => ({...p, monthly: {...p.monthly, [m]: {...p.monthly[m], [t]: [...p.monthly[m][t], {id:Date.now(),nombre:'',valor:0,tag:TAGS[0]}]}}}));
+            const updateGasto = (m, t, id, f, v) => setData(p => ({...p, monthly: {...p.monthly, [m]: {...p.monthly[m], [t]: p.monthly[m][t].map(i => i.id === id ? {...i, [f]: f==='valor'?parseFloat(v)||0:v} : i)}}}));
+            const deleteGasto = (m, t, id) => setData(p => ({...p, monthly: {...p.monthly, [m]: {...p.monthly[m], [t]: p.monthly[m][t].filter(i => i.id !== id)}}}));
+
+            const cur = data.monthly[activeTab] || {};
+            const ingT = (cur.salario || 0) + (cur.entradas || 0) + (cur.mesPasado || 0) + (cur.prestado || 0);
+            const base = Math.max(0, ingT - (cur.ahorroManual || 0));
+            const vNec = base * (data.config.pNec / 100);
+            const vDes = base * (data.config.pDes / 100);
+            const vAho = base * (data.config.pAho / 100);
+            const gFij = cur.gastosFijos?.reduce((s, g) => s + (parseFloat(g.valor) || 0), 0) || 0;
+            const gVar = cur.gastosVariables?.reduce((s, g) => s + (parseFloat(g.valor) || 0), 0) || 0;
+            const totalG = gFij + gVar;
+            const disp = (vNec + vDes) - totalG;
+            const isNecOver = gFij > vNec;
+            const isDesOver = gVar > vDes;
+            const isConfigValid = (data.config.pNec + data.config.pDes + data.config.pAho) === 100;
+
+            const savings = MONTHS.map(m => {
+                const d = data.monthly[m];
+                const i = (d.salario || 0) + (d.entradas || 0) + (d.mesPasado || 0) + (d.prestado || 0);
+                const b = Math.max(0, i - (d.ahorroManual || 0));
+                const fs = d.gastosFijos?.reduce((s, g) => s + (parseFloat(g.valor) || 0), 0) || 0;
+                const vs = d.gastosVariables?.reduce((s, g) => s + (parseFloat(g.valor) || 0), 0) || 0;
+                const rem = Math.max(0, (b * ((data.config.pNec + data.config.pDes) / 100)) - (fs + vs));
+                return { month: m, total: (d.ahorroManual || 0) + (b * (data.config.pAho / 100)) + rem };
+            });
+
+            const catData = useMemo(() => {
+                const c = {}; TAGS.forEach(t => c[t] = 0);
+                cur.gastosVariables?.forEach(g => c[g.tag] = (c[g.tag] || 0) + (parseFloat(g.valor) || 0));
+                return Object.keys(c).map(t => ({ name: t, value: c[t] })).filter(d => d.value > 0);
+            }, [cur]);
+
+            const syncToSheets = async () => {
+                if (!CLOUD_DATABASE_URL || CLOUD_DATABASE_URL.includes("URL_DE_TU")) return alert("Configurar URL");
+                setSyncStatus('loading');
+                try {
+                    await fetch(CLOUD_DATABASE_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ perfil: activeProfile, datos: data }) });
+                    setSyncStatus('success'); setTimeout(() => setSyncStatus('idle'), 2000);
+                } catch (e) { setSyncStatus('error'); }
+            };
+
+            const loadFromSheets = async () => {
+                if (!CLOUD_DATABASE_URL || CLOUD_DATABASE_URL.includes("URL_DE_TU")) return;
+                setSyncStatus('loading');
+                try {
+                    const r = await fetch(`${CLOUD_DATABASE_URL}?perfil=${activeProfile}`);
+                    const c = await r.json();
+                    if (c.monthly) { setData(c); setSyncStatus('success'); }
+                } catch (e) { setSyncStatus('error'); }
+                setTimeout(() => setSyncStatus('idle'), 2000);
+            };
+
+            if (authState === 'locked') return (
+                <div className="h-screen flex items-center justify-center bg-slate-900 p-6">
+                    <form onSubmit={handleMasterLogin} className="bg-white p-10 rounded-[3rem] shadow-2xl max-w-sm w-full text-center space-y-8 fade-in">
+                        <div className="bg-indigo-600 w-16 h-16 rounded-2xl flex items-center justify-center text-white mx-auto shadow-xl shadow-indigo-100"><Icons.Lock /></div>
+                        <h1 className="text-xl font-black text-slate-800 tracking-tighter">Finance Elite</h1>
+                        <input type="password" placeholder="CLAVE" className="w-full bg-slate-50 border rounded-2xl p-4 text-center text-xl outline-none focus:ring-2 focus:ring-indigo-100 font-black" value={masterPass} onChange={e => setMasterPass(e.target.value)} autoFocus />
+                        <button className="w-full bg-slate-900 text-white p-4 rounded-2xl font-black uppercase text-xs hover:bg-indigo-600 transition-all shadow-lg">Entrar</button>
+                    </form>
+                </div>
+            );
+
+            if (authState === 'profile_select') return (
+                <div className="h-screen flex items-center justify-center bg-slate-50 p-6 overflow-y-auto">
+                    <div className="max-w-md w-full space-y-12 fade-in py-10 text-center">
+                        <h1 className="text-4xl font-black text-slate-800 tracking-tighter">Cuentas</h1>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {profiles.map(p => (
+                                <button key={p.name} onClick={() => initiateProfileAuth(p)} className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-2xl hover:border-indigo-300 transition-all group flex flex-col items-center gap-4">
+                                    <div className="bg-indigo-50 w-14 h-14 rounded-2xl flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all"><Icons.User /></div>
+                                    <span className="font-black text-slate-800 text-lg capitalize tracking-tight">{p.name}</span>
+                                </button>
+                            ))}
+                            <div className="col-span-1 sm:col-span-2 bg-white p-8 rounded-[2.5rem] border-2 border-dashed border-slate-200 space-y-6">
+                                <h3 className="text-[10px] font-black uppercase text-slate-400">Nuevo Usuario</h3>
+                                <form onSubmit={handleCreateProfile} className="space-y-4 font-bold">
+                                    <input name="pname" placeholder="Nombre" className="w-full bg-slate-50 rounded-2xl px-5 py-4 text-sm outline-none border" required />
+                                    <input name="ppin" type="password" placeholder="PIN" className="w-full bg-slate-50 rounded-2xl px-5 py-4 text-sm outline-none border" required />
+                                    <button className="w-full bg-slate-900 text-white p-4 rounded-2xl font-black uppercase text-[10px]">Crear Cuenta</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            if (authState === 'profile_auth') return (
+                <div className="h-screen flex items-center justify-center bg-indigo-600 p-6">
+                    <form onSubmit={handleProfileAuth} className="bg-white p-12 rounded-[3rem] shadow-2xl max-w-sm w-full text-center space-y-10 fade-in">
+                        <h1 className="text-3xl font-black text-slate-800 tracking-tighter capitalize italic">{pendingProfile?.name}</h1>
+                        <input type="password" placeholder="PIN" className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-5 text-center text-xl outline-none focus:ring-4 focus:ring-indigo-50 font-black" value={profilePass} onChange={e => setProfilePass(e.target.value)} autoFocus />
+                        <div className="flex gap-3"><button type="button" onClick={() => setAuthState('profile_select')} className="flex-1 bg-slate-50 text-slate-400 p-4 rounded-2xl font-black text-xs">ATRÁS</button><button className="flex-[2] bg-indigo-600 text-white p-4 rounded-2xl font-black text-xs shadow-lg">ENTRAR</button></div>
+                    </form>
+                </div>
+            );
+
+            return (
+                <div className={`flex h-screen transition-all ${isMobileMode ? 'justify-center items-center p-2 bg-slate-200' : 'bg-slate-50'}`}>
+                    <button onClick={() => setIsMobileMode(!isMobileMode)} className="fixed bottom-6 right-6 z-[100] bg-indigo-600 text-white p-4 rounded-2xl shadow-xl hover:scale-105 active:scale-95 transition-all">{isMobileMode ? <Icons.Monitor /> : <Icons.Smartphone />}</button>
+
+                    {!isMobileMode && (
+                        <aside className="w-64 bg-white border-r border-slate-200 flex flex-col shrink-0 shadow-sm">
+                            <div className="p-8 border-b border-slate-50 flex items-center justify-between"><div className="flex items-center gap-2"><div className="bg-indigo-600 p-1.5 rounded-lg text-white shadow-md shadow-indigo-100"><Icons.Wallet /></div><h1 className="font-bold text-slate-800 tracking-tighter italic">FinanceApp</h1></div><button onClick={logout} className="text-slate-300 hover:text-rose-500 transition-colors"><Icons.Logout /></button></div>
+                            <div className="p-6 bg-indigo-50/30 border-b border-indigo-50 text-center font-black capitalize italic text-indigo-800">{activeProfile}</div>
+                            <nav className="flex-1 overflow-y-auto p-4 space-y-1 custom-scrollbar font-bold">
+                                <button onClick={() => setActiveTab('Ahorros')} className={`w-full text-left px-4 py-3 rounded-xl text-[11px] uppercase transition-all ${activeTab==='Ahorros'?'bg-indigo-50 text-indigo-700 shadow-sm':'text-slate-500'}`}>Bóveda</button>
+                                <button onClick={() => setActiveTab('Préstamos')} className={`w-full text-left px-4 py-3 rounded-xl text-[11px] uppercase transition-all ${activeTab==='Préstamos'?'bg-indigo-50 text-indigo-700 shadow-sm':'text-slate-500'}`}>Préstamos</button>
+                                <div className="p-4"><button onClick={syncToSheets} className="w-full bg-slate-900 text-white text-[9px] font-black p-3 rounded-xl flex items-center justify-center gap-2 shadow-lg mb-2"><Icons.Cloud className="w-3 h-3" /> {syncStatus === 'loading' ? '...' : 'SUBIR NUBE'}</button><button onClick={loadFromSheets} className="w-full bg-white border border-slate-200 text-slate-600 text-[9px] font-black p-3 rounded-xl">DESCARGAR</button></div>
+                                {MONTHS.map(m => ( <button key={m} onClick={() => setActiveTab(m)} className={`w-full text-left px-4 py-2.5 rounded-xl transition-all text-xs font-bold ${activeTab===m?'bg-slate-900 text-white shadow-lg':'text-slate-400 hover:bg-slate-50'}`}>{m}</button> ))}
+                            </nav>
+                        </aside>
+                    )}
+
+                    <div className={`flex-1 flex flex-col transition-all duration-500 ${isMobileMode ? 'max-w-[400px] max-h-[820px] w-full h-full bg-white rounded-3xl border-[12px] border-slate-900 shadow-2xl overflow-hidden relative' : 'overflow-hidden'}`}>
+                        {isMobileMode && ( <header className="bg-white px-6 pt-10 pb-4 border-b border-slate-100 flex justify-between items-center sticky top-0 z-50"><div className="flex flex-col"><h2 className="font-black text-slate-800 uppercase text-[11px] italic tracking-tighter">{activeTab}</h2><span className="text-[8px] font-black text-indigo-500 capitalize">{activeProfile}</span></div><div className="flex gap-4"><button onClick={syncToSheets} className="text-slate-400"><Icons.Cloud className="w-4 h-4" /></button><button onClick={logout} className="text-slate-300"><Icons.Logout className="w-4 h-4" /></button></div></header> )}
+
+                        <main className={`flex-1 overflow-y-auto custom-scrollbar ${isMobileMode ? 'p-5 pb-32' : 'p-10 lg:p-16'}`}>
+                            {activeTab === 'Ahorros' && (
+                                <div className="space-y-8 fade-in">
+                                    <div className="bg-indigo-600 p-10 rounded-[2.5rem] text-white shadow-2xl"><span className="text-[10px] font-black uppercase opacity-60 tracking-widest italic">Acumulado ({activeProfile})</span><h2 className="text-5xl font-black mt-2 tracking-tighter">{fmt(savings.reduce((s, a) => s + a.total, 0))}</h2></div>
+                                    <div className="bg-white border rounded-[2rem] overflow-hidden shadow-sm font-bold"><table className="w-full text-left text-sm font-bold"><thead className="bg-slate-50 border-b text-slate-400 font-black uppercase text-[9px] tracking-widest italic"><tr><th className="p-5">Periodo</th><th className="p-5 text-right font-bold">Ahorro</th></tr></thead><tbody className="divide-y divide-slate-50 font-bold italic">{savings.map(s => <tr key={s.month} className="hover:bg-slate-50 transition-colors"><td className="p-5 text-slate-700">{s.month}</td><td className="p-5 text-right text-emerald-600">{fmt(s.total)}</td></tr>)}</tbody></table></div>
+                                </div>
+                            )}
+
+                            {activeTab === 'Préstamos' && (
+                                <div className="space-y-8 fade-in">
+                                    <div className="bg-white p-8 rounded-[2rem] border shadow-sm space-y-6"><h3 className="font-black text-slate-800 text-[11px] uppercase tracking-widest italic">Nueva Deuda</h3><form onSubmit={e => {e.preventDefault(); addLoan(e.target.n.value, e.target.m.value); e.target.reset();}} className="flex gap-3 font-bold"><input name="n" placeholder="Deudor" className="flex-1 text-xs p-4 bg-slate-50 border rounded-2xl outline-none focus:bg-white" required /><input name="m" type="number" step="0.01" placeholder="€" className="w-24 text-xs p-4 bg-slate-50 border rounded-2xl outline-none" required /><button className="bg-indigo-600 text-white px-6 rounded-2xl font-black text-[10px] shadow-lg shadow-indigo-50">OK</button></form></div>
+                                    <div className="space-y-3 font-bold">{data.loans.map(l => ( <div key={l.id} className={`flex items-center justify-between p-6 rounded-[2rem] border shadow-sm transition-all ${l.pagado?'opacity-50 bg-slate-50':'bg-white'}`}><div className="flex items-center gap-4"><button onClick={() => toggleLoan(l.id)} className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg ${l.pagado?'bg-emerald-100 text-emerald-600':'bg-amber-100 text-amber-600'}`}>{l.pagado?'✓':'⏰'}</button><div><p className={`text-sm font-black text-slate-800 ${l.pagado?'line-through opacity-40':''}`}>{l.nombre}</p><p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest italic">{l.fecha}</p></div></div><div className="flex items-center gap-5"><span className="text-lg font-black text-slate-900">{fmt(l.monto)}</span><button onClick={() => deleteLoan(l.id)} className="text-slate-200 hover:text-rose-500 transition-colors"><Icons.Trash className="w-4 h-4" /></button></div></div> ))}</div>
+                                </div>
+                            )}
+
+                            {MONTHS.includes(activeTab) && (
+                                <div className="space-y-12 fade-in">
+                                    <header className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-slate-100 pb-8 gap-6 font-black"><h2 className="text-5xl font-black text-slate-900 tracking-tighter italic">{activeTab}</h2><div className="text-right font-black"><span className="text-[10px] font-black text-slate-300 uppercase tracking-[0.3em] block mb-1">Disponible Real</span><div className={`text-3xl font-black tracking-tighter ${disp < 0 ? 'text-rose-500' : 'text-indigo-600'}`}>{fmt(disp)}</div></div></header>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 font-black">{[{l:'Sueldo',k:'salario'},{l:'Extra',k:'entradas'},{l:'Pasado',k:'mesPasado'},{l:'Prést.',k:'prestado'}].map(i => ( <div key={i.k} className="bg-white p-5 rounded-[1.5rem] border shadow-sm focus-within:border-indigo-300"><label className="text-[9px] font-black text-slate-400 uppercase mb-2 block tracking-widest italic underline decoration-2 decoration-indigo-50">{i.l}</label><div className="flex items-center gap-1 text-slate-800"><span className="text-slate-300 text-xs italic">€</span><input type="number" className="bg-transparent border-none w-full p-0 outline-none text-sm font-black" value={cur[i.k] || ''} onChange={e=>updateMonth(activeTab,i.k,e.target.value)} /></div></div> ))}</div>
+
+                                    <div className="bg-slate-900 p-10 rounded-[2.5rem] text-white flex flex-col md:flex-row justify-between items-center gap-6 shadow-2xl border border-slate-800 relative overflow-hidden group"><div className="absolute top-0 right-0 p-12 opacity-5 group-hover:scale-110 transition-all font-black text-9xl italic uppercase">A</div><div className="flex items-center gap-6 relative z-10"><div className="bg-white/10 w-16 h-16 rounded-2xl flex items-center justify-center text-indigo-400 italic shadow-inner font-black">A</div><div><h4 className="font-black text-xl tracking-tighter italic uppercase text-xs opacity-60">Ahorro Manual</h4><p className="text-indigo-200 text-xs font-medium opacity-60">Se separa primero de todo.</p></div></div><div className="flex items-center gap-4 border-b-2 border-white/20 pb-2 min-w-[180px] relative z-10 font-black"><span className="text-indigo-400 text-3xl italic font-black">€</span><input type="number" className="bg-transparent border-none p-0 text-4xl text-white outline-none w-full text-center font-black" placeholder="0" value={cur.ahorroManual || ''} onChange={(e)=>updateMonth(activeTab,'ahorroManual',e.target.value)} /></div></div>
+
+                                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-12 font-black">
+                                        <div className="lg:col-span-2 space-y-10 bg-white p-10 rounded-[2.5rem] border shadow-sm font-medium"><div className="flex justify-between items-center font-black text-[10px] text-slate-400 uppercase tracking-widest italic underline decoration-indigo-500 decoration-2"><div className="flex items-center gap-2"><Icons.Settings className="text-indigo-500 w-3 h-3" /> Distribución Regla %</div>{!isConfigValid && <span className="text-rose-500 animate-pulse decoration-2 font-black">Error 100%</span>}</div><div className="space-y-10">{[{l:'Fijos',k:'pNec',v:vNec,c:'accent-indigo-600',i:'ArrowDownCircle'},{l:'Deseos',k:'pDes',v:vDes,c:'accent-pink-600',i:'Tag'},{l:'Extra',k:'pAho',v:vAho,c:'accent-emerald-600',i:'Piggy'}].map(i => ( <div key={i.k} className="space-y-4"><div className="flex justify-between text-xs font-black uppercase tracking-tight italic"><div className="flex items-center gap-2 text-slate-400 italic font-black">{i.i === 'ArrowDownCircle' && <Icons.ArrowDownCircle className="w-4 h-4" />}{i.i === 'Tag' && <Icons.Tag className="w-4 h-4" />}{i.i === 'Piggy' && <Icons.Piggy className="w-4 h-4" />}<span>{i.l} ({data.config[i.k]}%)</span></div><span className="text-slate-800 text-base font-black italic">{fmt(i.v)}</span></div><input type="range" min="0" max="100" className={`w-full h-2 bg-slate-100 rounded-full cursor-pointer ${i.c} shadow-inner transition-all hover:scale-[1.02]`} value={data.config[i.k]} onChange={e=>updateConfig(i.k,e.target.value)} /></div> ))}</div></div>
+                                        <div className="bg-white p-6 rounded-[2.5rem] border shadow-sm relative flex flex-col items-center justify-center font-black"><div className="h-64 w-full relative flex items-center justify-center font-black"><div className="absolute flex flex-col items-center justify-center z-10 pointer-events-none text-center"><span className={`text-3xl font-black tracking-tighter ${disp < 0 ? 'text-rose-500' : 'text-slate-800'}`}>{fmt(disp)}</span><span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-2 italic font-black">Disponible</span></div><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={[{v:totalG,fill:disp < 0 ? '#fecdd3' : '#e0e7ff'}, {v:Math.max(0, disp), fill:'#6366f1'}]} innerRadius={80} outerRadius={105} paddingAngle={0} dataKey="v" stroke="none" startAngle={90} endAngle={450} /></PieChart></ResponsiveContainer></div></div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 font-black">
+                                        <div className={`p-8 rounded-[2.5rem] border shadow-sm bg-white transition-all ${isNecOver?'border-rose-100 bg-rose-50/20':'border-slate-100'}`}><div className="flex justify-between items-center mb-10 font-black text-slate-800 uppercase text-xs tracking-[0.2em] italic"><span>Necesidades</span><button onClick={()=>addGasto(activeTab,'gastosFijos')} className="p-2.5 bg-slate-900 text-white rounded-xl shadow-lg"><Icons.Plus className="w-5 h-5" /></button></div><div className="space-y-4">{cur.gastosFijos?.map(g => ( <div key={g.id} className="flex gap-4 items-center bg-white border border-slate-50 p-3.5 rounded-2xl shadow-sm transition-all hover:border-indigo-100 group font-black"><input className="flex-1 bg-transparent border-none text-xs font-black outline-none text-slate-700 placeholder-slate-200" value={g.nombre} onChange={e=>updateGasto(activeTab,'gastosFijos',g.id,'nombre',e.target.value)} placeholder="Concepto..." /><div className="flex items-center bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100 font-black text-xs shrink-0"><span className="text-slate-300 mr-2 italic font-black">€</span><input type="number" className="w-16 bg-transparent outline-none text-right font-black" value={g.valor || ''} onChange={e=>updateGasto(activeTab,'gastosFijos',g.id,'valor',e.target.value)} /></div><button onClick={()=>deleteGasto(activeTab,'gastosFijos',g.id)} className="text-slate-200 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100 font-black"><Icons.Trash className="w-4 h-4" /></button></div> ))}</div></div>
+                                        <div className={`p-8 rounded-[2.5rem] border shadow-sm bg-white transition-all ${isDesOver?'border-rose-100 bg-rose-50/20':'border-slate-100'}`}><div className="flex justify-between items-center mb-10 font-black text-slate-800 uppercase text-xs tracking-[0.2em] italic"><span>Deseos</span><button onClick={()=>addGasto(activeTab,'gastosVariables')} className="p-2.5 bg-slate-900 text-white rounded-xl shadow-lg"><Icons.Plus className="w-5 h-5" /></button></div><div className="space-y-6 font-black">{cur.gastosVariables?.map(g => ( <div key={g.id} className="bg-white border border-slate-100 p-6 rounded-[2rem] shadow-sm space-y-4 group transition-all hover:border-pink-100 font-black"><div className="flex justify-between items-center font-black"><select className="text-[9px] font-black uppercase text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-xl outline-none appearance-none" value={g.tag} onChange={e=>updateGasto(activeTab,'gastosVariables',g.id,'tag',e.target.value)}>{TAGS.map(t=><option key={t}>{t}</option>)}</select><button onClick={()=>deleteGasto(activeTab,'gastosVariables',g.id)} className="text-slate-200 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100 font-black font-black"><Icons.Trash className="w-4 h-4" /></button></div><div className="flex gap-4"><input className="flex-1 bg-transparent border-none text-sm font-black outline-none text-slate-700 placeholder-slate-300 italic font-black" value={g.nombre} onChange={e=>updateGasto(activeTab,'gastosVariables',g.id,'nombre',e.target.value)} placeholder="¿Qué compraste?" /><div className="flex items-center border-b-2 border-slate-100 font-black text-sm min-w-[90px]"><span className="text-slate-300 mr-2 italic">€</span><input type="number" className="w-full bg-transparent outline-none text-right font-black" value={g.valor || ''} onChange={e=>updateGasto(activeTab,'gastosVariables',g.id,'valor',e.target.value)} /></div></div></div> ))}</div></div>
+                                    </div>
+
+                                    {catData.length > 0 && (
+                                        <div className="bg-white p-12 rounded-[3rem] border shadow-sm space-y-12"><h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.4em] flex items-center gap-3 italic underline decoration-indigo-200 decoration-8 font-black">Gastos Desglosados</h3><div className="h-[400px] w-full pt-4 font-black italic font-black"><ResponsiveContainer width="100%" height="100%"><BarChart data={catData} layout="vertical" margin={{ left: 10, right: 60 }}><CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" /><XAxis type="number" hide /><YAxis dataKey="name" type="category" axisLine={false} tickLine={false} fontSize={10} width={80} tick={{ fill: '#64748B', fontWeight: '900' }} /><Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ border: 'none', borderRadius: '15px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', fontWeight: '900' }} /><Bar dataKey="value" radius={[0, 20, 20, 0]} barSize={40}>{catData.map((e,idx)=><Cell key={idx} fill={COLORS[idx % COLORS.length]} />)}<LabelList dataKey="value" position="right" formatter={v=>fmt(v)} style={{ fontWeight: '900', fontSize: '12px', fill: '#1e293b' }} /></Bar></BarChart></ResponsiveContainer></div></div>
+                                    )}
+                                </div>
+                            )}
+                        </main>
+                        
+                        {isMobileMode && (
+                            <nav className="absolute bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-100 h-24 flex justify-around items-center px-4 pb-8 z-50">
+                                <button onClick={()=>{setActiveTab('Ahorros');setShowMonthSelector(false);}} className={`flex flex-col items-center gap-1.5 flex-1 transition-all ${activeTab==='Ahorros'?'text-indigo-600 font-black scale-110 italic':'text-slate-300'}`}><Icons.Piggy className="w-6 h-6" /><span className="text-[9px] uppercase font-black tracking-tighter font-black">Bóveda</span></button>
+                                <div className="flex-1 flex justify-center"><button onClick={()=>setShowMonthSelector(!showMonthSelector)} className={`bg-slate-900 text-white p-5 rounded-3xl shadow-xl active:scale-95 transition-all border-4 border-white -translate-y-12 ${showMonthSelector?'bg-indigo-600 rotate-180':''}`}><Icons.Calendar className="w-7 h-7" /></button>{showMonthSelector && ( <div className="absolute bottom-28 left-1/2 -translate-x-1/2 bg-white rounded-[2.5rem] p-6 shadow-2xl border border-slate-100 grid grid-cols-3 gap-3 w-[280px] animate-in zoom-in duration-300 z-[100]">{MONTHS.map(m => <button key={m} onClick={()=>{setActiveTab(m);setShowMonthSelector(false)}} className={`p-3 text-[10px] font-black rounded-xl uppercase transition-colors ${activeTab===m?'bg-indigo-600 text-white shadow-md font-black':'bg-slate-50 font-black'}`}>{m.slice(0,3)}</button>)}</div> )}</div>
+                                <button onClick={()=>{setActiveTab('Préstamos'); setShowMonthSelector(false);}} className={`flex flex-col items-center gap-1.5 flex-1 transition-all ${activeTab==='Préstamos'?'text-indigo-600 font-black scale-110 italic':'text-slate-300'}`}><Icons.LoansIcon className="w-6 h-6" /><span className="text-[9px] uppercase font-black tracking-tighter font-black">Deudas</span></button>
+                            </nav>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
